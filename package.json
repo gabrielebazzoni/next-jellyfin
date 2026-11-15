@@ -1,0 +1,64 @@
+{
+  "name": "next-jellyfin",
+  "version": "0.1.0",
+  "description": "The full Jellyfin web client as a Next.js component, with server-side auto-login and version selection",
+  "keywords": [
+    "jellyfin",
+    "nextjs",
+    "react",
+    "media-server",
+    "server-component"
+  ],
+  "license": "MIT",
+  "author": "gabrielebazzoni",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gabrielebazzoni/next-jellyfin.git"
+  },
+  "homepage": "https://github.com/gabrielebazzoni/next-jellyfin#readme",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "default": "./dist/config.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "next-jellyfin": "./bin/next-jellyfin.mjs"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "tsc -p tsconfig.json"
+  },
+  "engines": {
+    "node": ">=20.12"
+  },
+  "dependencies": {
+    "server-only": "^0.0.1"
+  },
+  "peerDependencies": {
+    "next": ">=15",
+    "react": ">=19"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "next": "16.4.6",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "typescript": "^5"
+  }
+}

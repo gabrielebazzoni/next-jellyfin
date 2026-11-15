@@ -1,0 +1,33 @@
+/**
+ * Enables "proxy" mode: `/jellyfin/*` is served from `<serverUrl>/web/*`, so the web client always matches
+ * your server version and server-side web plugins (JavaScript Injector, File Transformation, ...) work.
+ *
+ * It is a `fallback` rewrite: a copy installed in `public/jellyfin` (`npx next-jellyfin sync`) always wins.
+ *
+ *   // next.config.ts
+ *   import { withJellyfin } from 'next-jellyfin/config';
+ *   export default withJellyfin({ ...yourConfig });
+ */
+export function withJellyfin(config = {}, options = {}) {
+    const serverUrl = (options.serverUrl ?? process.env.JELLYFIN_SERVER_URL)?.replace(/\/+$/, '');
+    if (!serverUrl)
+        return config;
+    const base = `/${(options.basePath ?? '/jellyfin').replace(/^\/+|\/+$/g, '')}`;
+    const proxy = { source: `${base}/:path*`, destination: `${serverUrl}/web/:path*` };
+    return {
+        ...config,
+        async rewrites() {
+            const existing = (await config.rewrites?.()) ?? [];
+            if (Array.isArray(existing)) {
+                // a plain array means "afterFiles"
+                return { beforeFiles: [], afterFiles: existing, fallback: [proxy] };
+            }
+            return {
+                beforeFiles: existing.beforeFiles ?? [],
+                afterFiles: existing.afterFiles ?? [],
+                fallback: [...(existing.fallback ?? []), proxy]
+            };
+        }
+    };
+}
+export default withJellyfin;
