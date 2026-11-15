@@ -90,6 +90,21 @@ If your Jellyfin has a **Base URL** (Dashboard → Networking, e.g. `/media-serv
 
 ## Troubleshooting
 
+- **CORS errors on some requests (e.g. `Cache-Control is not allowed by Access-Control-Allow-Headers`) or a failing
+  `/socket` WebSocket** usually come from a reverse proxy in front of Jellyfin that answers CORS itself. Let Jellyfin
+  handle CORS, or allow every header the client sends and proxy the WebSocket, e.g. for nginx:
+
+  ```nginx
+  add_header Access-Control-Allow-Headers "Authorization, Content-Type, Accept, X-Emby-Authorization, Cache-Control, Pragma, Range" always;
+
+  location /jellyfin/socket {          # use your Base URL
+      proxy_pass http://jellyfin:8096;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+  }
+  ```
+
 - **"Connection Failure" or CORS errors in the browser console**: `serverUrl` doesn't point to the Jellyfin API.
   Open `<serverUrl>/System/Info/Public`: it must return JSON. Check the Base URL (see above).
 - **Login problems** are logged on the Next.js server console as `[next-jellyfin] ...`. When the login fails,
@@ -124,11 +139,16 @@ If your Jellyfin has a **Base URL** (Dashboard → Networking, e.g. `/media-serv
 
 | Kind | Works? |
 |---|---|
-| Client plugins built into jellyfin-web (players, SyncPlay, Chromecast, screensavers, …) | ✅ always |
-| Server plugins (dashboard configuration pages, metadata, subtitles, auth, …) | ✅ always, pages come from the server API |
-| Plugins that inject scripts/CSS into the server's web client (JavaScript Injector, File Transformation and plugins based on it, such as Jellyfin Enhanced, Home Screen Sections, Custom Tabs) | ✅ in **proxy mode** only |
+| Client plugins built into jellyfin-web (players, SyncPlay, Chromecast, screensavers, …) | ✅ |
+| Server plugins (dashboard configuration pages, metadata, subtitles, auth, …) | ✅ pages come from the server API |
+| Plugins that add scripts/CSS to the server's web client (InPlayerEpisodePreview, JavaScript Injector, File Transformation and plugins based on it, such as Jellyfin Enhanced, Home Screen Sections, Custom Tabs) | ✅ see below |
 
-Custom CSS from Dashboard → General → Branding always works.
+Those plugins add `<script>`, `<link>` and `<style>` tags to the `index.html` served by Jellyfin. The component reads
+`<serverUrl>/web/index.html` on the Next.js server (cached for 60 s), keeps only the tags added by plugins, makes
+their URLs absolute to your server and injects them into the client. This works in both static and proxy mode,
+and needs `serverUrl` to be set.
+
+Plugins that *replace* jellyfin-web's own files (instead of adding tags) only work in proxy mode.
 
 ## Notes
 

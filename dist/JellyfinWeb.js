@@ -4,6 +4,8 @@ import { createHash } from 'node:crypto';
 import { Suspense } from 'react';
 import { connection } from 'next/server';
 import { resolveServerUrl } from './server-url.js';
+import { getPluginTags } from './plugins.js';
+import ClientFrame from './JellyfinFrame.js';
 // ---------------------------------------------------------------------------------------------------
 // Server-side login (with in-memory token cache)
 // ---------------------------------------------------------------------------------------------------
@@ -101,12 +103,14 @@ async function JellyfinFrame(props) {
     const hash = route ? `#${route.startsWith('/') ? route : `/${route}`}` : '';
     const src = `${basePath.replace(/\/+$/, '')}/index.html${hash}`;
     let session;
+    let inject = [];
     if (serverUrl) {
         await connection(); // talk to Jellyfin at request time, never at build time
         try {
             const { url, info } = await resolveServerUrl(serverUrl);
             // Without credentials (or if login fails) the server is still pre-selected on Jellyfin's login page.
             session = { serverUrl: url, serverId: info.Id, serverName: info.ServerName };
+            inject = await getPluginTags(url); // scripts/styles that server plugins add to Jellyfin's web client
             if (accessToken && userId) {
                 session = { ...session, accessToken, userId };
             }
@@ -121,7 +125,9 @@ async function JellyfinFrame(props) {
             console.error(`[next-jellyfin] ${error.message}`);
         }
     }
-    return (_jsx("iframe", { src: session ? undefined : src, srcDoc: session ? `<!doctype html><script>${bootstrapScript(session, src)}</script>` : undefined, title: title, className: className, style: { border: 0, width: '100%', height: '100%', display: 'block', ...style }, allow: 'autoplay; fullscreen; picture-in-picture; encrypted-media', allowFullScreen: true }, session ? `${session.serverId}:${session.accessToken ?? ''}` : 'anonymous'));
+    return (_jsx(ClientFrame
+    // A new key per token reloads the frame (and re-injects) when the session changes.
+    , { src: session ? undefined : src, srcDoc: session ? `<!doctype html><script>${bootstrapScript(session, src)}</script>` : undefined, inject: inject, title: title, className: className, style: style }, session ? `${session.serverId}:${session.accessToken ?? ''}` : 'anonymous'));
 }
 export default function JellyfinWeb(props) {
     return (_jsx(Suspense, { children: _jsx(JellyfinFrame, { ...props }) }));
