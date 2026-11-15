@@ -82,11 +82,24 @@ npx next-jellyfin sync proxy   # removes public/jellyfin
 `JELLYFIN_SERVER_URL` must also be set during `next build`. `withJellyfin(config, { serverUrl, basePath })` accepts
 explicit options as well. A copy in `public/jellyfin` always takes precedence over the proxy.
 
+## Base URL
+
+If your Jellyfin has a **Base URL** (Dashboard → Networking, e.g. `/media-server`), it is detected automatically:
+`https://example.com` becomes `https://example.com/media-server`. Setting the full URL in `serverUrl` /
+`JELLYFIN_SERVER_URL` saves one request at startup.
+
+## Troubleshooting
+
+- **"Connection Failure" or CORS errors in the browser console**: `serverUrl` doesn't point to the Jellyfin API.
+  Open `<serverUrl>/System/Info/Public`: it must return JSON. Check the Base URL (see above).
+- **Login problems** are logged on the Next.js server console as `[next-jellyfin] ...`. When the login fails,
+  Jellyfin's own login page is shown for that server.
+
 ## Props
 
 | Prop | Type | Description |
 |---|---|---|
-| `serverUrl` | `string` | Jellyfin server URL. Needed for auto-login. |
+| `serverUrl` | `string` | Jellyfin server URL (Base URL detected automatically). Needed for auto-login; on its own it pre-selects the server on Jellyfin's login page. |
 | `username`, `password` | `string` | Jellyfin user for auto-login. Without them, Jellyfin's own login page is shown. |
 | `accessToken`, `userId` | `string` | Instead of username/password: an existing access token. |
 | `route` | `string` | Initial route, e.g. `/home`, `/movies`, `/details?id=…`. |

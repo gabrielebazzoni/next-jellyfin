@@ -1,3 +1,4 @@
+import { resolveServerUrl } from './server-url.js';
 /**
  * Enables "proxy" mode: `/jellyfin/*` is served from `<serverUrl>/web/*`, so the web client always matches
  * your server version and server-side web plugins (JavaScript Injector, File Transformation, ...) work.
@@ -13,10 +14,12 @@ export function withJellyfin(config = {}, options = {}) {
     if (!serverUrl)
         return config;
     const base = `/${(options.basePath ?? '/jellyfin').replace(/^\/+|\/+$/g, '')}`;
-    const proxy = { source: `${base}/:path*`, destination: `${serverUrl}/web/:path*` };
     return {
         ...config,
         async rewrites() {
+            // Picks up the server's Base URL (e.g. /media-server) if serverUrl doesn't include it.
+            const target = await resolveServerUrl(serverUrl).then(r => r.url, () => serverUrl);
+            const proxy = { source: `${base}/:path*`, destination: `${target}/web/:path*` };
             const existing = (await config.rewrites?.()) ?? [];
             if (Array.isArray(existing)) {
                 // a plain array means "afterFiles"

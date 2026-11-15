@@ -1,2 +1,2 @@
-export { default, default as JellyfinWeb } from './JellyfinWeb';
-export type { JellyfinWebProps } from './JellyfinWeb';
+export { default, default as JellyfinWeb } from './JellyfinWeb.js';
+export type { JellyfinWebProps } from './JellyfinWeb.js';

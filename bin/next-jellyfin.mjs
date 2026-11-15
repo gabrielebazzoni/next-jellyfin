@@ -20,6 +20,7 @@ import { existsSync } from 'node:fs';
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { resolveServerUrl } from '../dist/server-url.js';
 
 const REPO = 'https://repo.jellyfin.org/files/server/debian';
 const GIT = 'https://github.com/jellyfin/jellyfin-web.git';
@@ -44,7 +45,7 @@ if (!existsSync(path.join(root, 'package.json'))) {
 }
 
 const dest = path.join(root, 'public', process.env.JELLYFIN_BASE_PATH ?? 'jellyfin');
-const serverUrl = process.env.JELLYFIN_SERVER_URL?.replace(/\/+$/, '');
+let serverUrl = process.env.JELLYFIN_SERVER_URL?.replace(/\/+$/, '');
 const arg = target ?? (serverUrl ? 'auto' : 'latest');
 
 const log = msg => console.log(`[jellyfin] ${msg}`);
@@ -62,11 +63,11 @@ async function listing(url) {
 
 async function serverVersion() {
     if (!serverUrl) fail('"auto" needs JELLYFIN_SERVER_URL');
-    const res = await fetch(`${serverUrl}/System/Info/Public`).catch(e => fail(`cannot reach ${serverUrl}: ${e.message}`));
-    if (!res.ok) fail(`${serverUrl}/System/Info/Public: HTTP ${res.status}`);
-    const { Version } = await res.json();
-    log(`server ${serverUrl} is version ${Version}`);
-    return Version;
+    const { url, info } = await resolveServerUrl(serverUrl).catch(e => fail(e.message));
+    if (url !== serverUrl) log(`server uses a Base URL: ${url} (consider setting JELLYFIN_SERVER_URL=${url})`);
+    serverUrl = url;
+    log(`server ${serverUrl} is version ${info.Version}`);
+    return info.Version;
 }
 
 /** Finds the jellyfin-web .deb URL for a version ("latest" or e.g. 10.11.11 / 12.4 / 12.4.0). */
@@ -134,7 +135,8 @@ async function install(webDir, label) {
 
     const configPath = path.join(dest, 'config.json');
     const config = JSON.parse(await readFile(configPath, 'utf8'));
-    config.servers = serverUrl ? [serverUrl] : [];
+    const url = serverUrl && (await resolveServerUrl(serverUrl).then(r => r.url, () => serverUrl));
+    config.servers = url ? [url] : [];
     config.multiserver = process.env.JELLYFIN_MULTISERVER === 'true' || !serverUrl;
     await writeFile(configPath, JSON.stringify(config, null, 4));
     await writeFile(path.join(dest, 'jellyfin-web-version.txt'), `${label}\n`);

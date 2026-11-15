@@ -1,6 +1,6 @@
 {
   "name": "next-jellyfin",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The full Jellyfin web client as a Next.js component, with server-side auto-login and version selection",
   "keywords": [
     "jellyfin",

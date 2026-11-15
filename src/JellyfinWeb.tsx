@@ -2,6 +2,7 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 import { Suspense, type CSSProperties } from 'react';
 import { connection } from 'next/server';
+import { resolveServerUrl } from './server-url.js';
 
 /**
  * <JellyfinWeb /> — the full Jellyfin web client (jellyfin-web, installed with `npx next-jellyfin sync`) as a
@@ -43,8 +44,9 @@ type Session = {
     serverUrl: string;
     serverId: string;
     serverName?: string;
-    accessToken: string;
-    userId: string;
+    /** Missing when only the server is pre-selected (Jellyfin shows its login page for it). */
+    accessToken?: string;
+    userId?: string;
     /** DeviceId the token was issued to (unknown for tokens passed in via props). */
     deviceId?: string;
 };
@@ -64,15 +66,17 @@ const authHeader = (deviceId: string, token?: string) =>
 
 async function jellyfinFetch<T>(url: string, init: RequestInit = {}): Promise<T> {
     const res = await fetch(url, { cache: 'no-store', ...init });
+    if (res.status === 401) throw new Error(`Jellyfin rejected the credentials (${url})`);
     if (!res.ok) throw new Error(`Jellyfin ${init.method ?? 'GET'} ${url}: HTTP ${res.status}`);
+    if (!(res.headers.get('content-type') ?? '').includes('json')) {
+        throw new Error(`Jellyfin ${url} did not return JSON (redirected to ${res.url}): check serverUrl`);
+    }
     return res.json() as Promise<T>;
 }
 
-async function serverInfo(serverUrl: string) {
-    return jellyfinFetch<{ Id: string; ServerName?: string }>(`${serverUrl}/System/Info/Public`);
-}
-
-async function login(serverUrl: string, username: string, password: string, deviceId: string): Promise<Session> {
+async function login(
+    serverUrl: string, serverName: string | undefined, username: string, password: string, deviceId: string
+): Promise<Session> {
     const auth = await jellyfinFetch<{ AccessToken: string; ServerId: string; User: { Id: string } }>(
         `${serverUrl}/Users/AuthenticateByName`,
         {
@@ -81,11 +85,10 @@ async function login(serverUrl: string, username: string, password: string, devi
             body: JSON.stringify({ Username: username, Pw: password })
         }
     );
-    const info = await serverInfo(serverUrl).catch(() => undefined);
     return {
         serverUrl,
         serverId: auth.ServerId,
-        serverName: info?.ServerName,
+        serverName,
         accessToken: auth.AccessToken,
         userId: auth.User.Id,
         deviceId
@@ -99,7 +102,9 @@ async function isValid(s: Session) {
     }).then(r => r.ok, () => false);
 }
 
-async function getSession(serverUrl: string, username: string, password: string): Promise<Session> {
+async function getSession(
+    serverUrl: string, serverName: string | undefined, username: string, password: string
+): Promise<Session> {
     const key = `${serverUrl}|${username}`;
     const deviceId = `nextjs-${createHash('sha256').update(key).digest('hex').slice(0, 32)}`;
 
@@ -115,7 +120,7 @@ async function getSession(serverUrl: string, username: string, password: string)
 
     let job = pending.get(key);
     if (!job) {
-        job = login(serverUrl, username, password, deviceId)
+        job = login(serverUrl, serverName, username, password, deviceId)
             .then(session => {
                 cache.set(key, { session, checkedAt: Date.now() });
                 return session;
@@ -136,8 +141,7 @@ function bootstrapScript(session: Session, target: string) {
         Name: session.serverName || 'Jellyfin',
         ManualAddress: session.serverUrl,
         LastConnectionMode: 2, // ConnectionMode.Manual
-        UserId: session.userId,
-        AccessToken: session.accessToken
+        ...(session.accessToken ? { UserId: session.userId, AccessToken: session.accessToken } : {})
     };
     // `<` escaped so the JSON can never close the <script> tag
     const json = (v: unknown) => JSON.stringify(v).replace(/</g, '\\u003c');
@@ -165,20 +169,29 @@ async function JellyfinFrame(props: JellyfinWebProps) {
     const src = `${basePath.replace(/\/+$/, '')}/index.html${hash}`;
 
     let session: Session | undefined;
-    if (serverUrl && (username || (accessToken && userId))) {
-        await connection(); // sign in at request time, never at build time
-        if (accessToken && userId) {
-            const info = await serverInfo(serverUrl);
-            session = { serverUrl, serverId: info.Id, serverName: info.ServerName, accessToken, userId };
-        } else {
-            session = await getSession(serverUrl, username!, password);
+    if (serverUrl) {
+        await connection(); // talk to Jellyfin at request time, never at build time
+        try {
+            const { url, info } = await resolveServerUrl(serverUrl);
+            // Without credentials (or if login fails) the server is still pre-selected on Jellyfin's login page.
+            session = { serverUrl: url, serverId: info.Id, serverName: info.ServerName };
+            if (accessToken && userId) {
+                session = { ...session, accessToken, userId };
+            } else if (username) {
+                session = await getSession(url, info.ServerName, username, password).catch(error => {
+                    console.error(`[next-jellyfin] login as "${username}" failed: ${(error as Error).message}`);
+                    return session;
+                });
+            }
+        } catch (error) {
+            console.error(`[next-jellyfin] ${(error as Error).message}`);
         }
     }
 
     return (
         <iframe
             // A new key per token reloads the frame (and re-injects) when the session changes.
-            key={session?.accessToken ?? 'anonymous'}
+            key={session ? `${session.serverId}:${session.accessToken ?? ''}` : 'anonymous'}
             src={session ? undefined : src}
             srcDoc={session ? `<!doctype html><script>${bootstrapScript(session, src)}</script>` : undefined}
             title={title}

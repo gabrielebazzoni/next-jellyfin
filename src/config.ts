@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { resolveServerUrl } from './server-url.js';
 
 type Rewrite = { source: string; destination: string };
 type Rewrites = Awaited<ReturnType<NonNullable<NextConfig['rewrites']>>>;
@@ -25,11 +26,13 @@ export function withJellyfin(config: NextConfig = {}, options: WithJellyfinOptio
     if (!serverUrl) return config;
 
     const base = `/${(options.basePath ?? '/jellyfin').replace(/^\/+|\/+$/g, '')}`;
-    const proxy: Rewrite = { source: `${base}/:path*`, destination: `${serverUrl}/web/:path*` };
 
     return {
         ...config,
         async rewrites() {
+            // Picks up the server's Base URL (e.g. /media-server) if serverUrl doesn't include it.
+            const target = await resolveServerUrl(serverUrl).then(r => r.url, () => serverUrl);
+            const proxy: Rewrite = { source: `${base}/:path*`, destination: `${target}/web/:path*` };
             const existing: Rewrites = (await config.rewrites?.()) ?? [];
             if (Array.isArray(existing)) {
                 // a plain array means "afterFiles"

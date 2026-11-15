@@ -1,1 +1,1 @@
-export { default, default as JellyfinWeb } from './JellyfinWeb';
+export { default, default as JellyfinWeb } from './JellyfinWeb.js';
